@@ -5,10 +5,12 @@ import customtkinter as ctk
 from moviepy.video.io.VideoFileClip import VideoFileClip 
 import torch
 import whisper
+import yt_dlp
 from downloader import VideoDownloader
 from utils import resource_path
 import threading
 import PIL.Image
+from PIL import ImageTk
 import os
 
 # Cấu hình giao diện
@@ -55,6 +57,12 @@ class App(ctk.CTk):
                 messagebox.showerror("Lỗi", f"Không thể lưu file: {e}")
     def __init__(self):
         super().__init__()
+        self.icon_path = resource_path("assets/download-file.ico")
+        try:
+            img = PIL.Image.open(self.icon_path)
+            self.wm_iconphoto(True, ImageTk.PhotoImage(img))
+        except:
+            pass
         self.title(" YouTube Pro - Win11 Style")
         
         # 1. Kích thước cửa sổ
@@ -93,14 +101,14 @@ class App(ctk.CTk):
 
         # --- Logo ---
         try:
-            logo_path = resource_path("download-file.png")
+            logo_path = resource_path("assets/download-file.png")
             logo_image = ctk.CTkImage(light_image=PIL.Image.open(logo_path),
                                       dark_image=PIL.Image.open(logo_path),
                                       size=(100, 100))
             self.logo_label = ctk.CTkLabel(self.tab_download, image=logo_image, text="")
             self.logo_label.grid(row=0, column=0, pady=(20, 10))
             
-            icon_path = resource_path("download-file.ico")
+            icon_path = resource_path("assets/download-file.ico")
             self.after(200, lambda: self.iconbitmap(icon_path))
         except:
             self.header_label = ctk.CTkLabel(self.tab_download, text="YOUTUBE DOWNLOADER", font=title_font)
@@ -215,9 +223,11 @@ class App(ctk.CTk):
     
     def toggle_audio(self):
         if self.audio_only.get():
-            self.q_combo.configure(state="disabled")
+            self.q_combo.configure(values=["320", "256", "192", "128"])
+            self.quality_var.set("192") # Giá trị mặc định cho Audio
         else:
-            self.q_combo.configure(state="readonly")
+            self.q_combo.configure(values=["4320", "2160", "1440", "1080", "720", "480"])
+            self.quality_var.set("1080") # Giá trị mặc định cho Video
 
     def browse_path(self):
         path = filedialog.askdirectory()
@@ -246,9 +256,46 @@ class App(ctk.CTk):
         if not url:
             messagebox.showwarning("Chú ý", "Chưa có link kìa!")
             return
-        self.status_label.configure(text="Đang kết nối...", text_color="blue")
-        threading.Thread(target=self.run_download, args=(url,), daemon=True).start()
 
+        self.status_label.configure(text="Đang check Metadata...", text_color="blue")
+
+        def check_and_start():
+            try:
+                import yt_dlp
+                # 1. Cấu hình để CHỈ lấy thông tin, không tải gì cả
+                with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    # Lấy tiêu đề gốc mà yt-dlp sẽ dùng
+                    title = info.get('title', 'video')
+                    
+                    # 2. Quan trọng: Tự "dự đoán" tên file cuối cùng sau khi FFmpeg xử lý
+                    # Windows không cho phép các ký tự này, phải xóa để check path chính xác
+                    clean_title = re.sub(r'[\\/*?:"<>|]', "", title)
+                    ext = "mp3" if self.audio_only.get() else "mp4"
+                    
+                    # Đường dẫn file mà CHẮC CHẮN nó sẽ được tạo ra sau khi convert
+                    final_file_path = os.path.join(self.save_path.get(), f"{clean_title}.{ext}")
+
+                # 3. Tiến hành so sánh với "kết quả cuối cùng"
+                if os.path.exists(final_file_path):
+                    # Nếu đã có file đích (mp3/mp4)
+                    if not messagebox.askyesno("Xác nhận", f"File '{clean_title}.{ext}' đã tồn tại.\nBạn có muốn tải và ghi đè không?"):
+                        self.status_label.configure(text="Đã hủy tải.", text_color="orange")
+                        return # Thoát luôn, không chạy Thread tải
+                    else:
+                        # Nếu Việt đồng ý, ta chủ động xóa file ĐÍCH cũ đi
+                        os.remove(final_file_path)
+
+                # 4. Nếu chưa có hoặc đồng ý ghi đè, mới gọi Thread tải thật
+                self.status_label.configure(text="Đang kết nối server...", text_color="blue")
+                threading.Thread(target=self.run_download, args=(url,), daemon=True).start()
+
+            except Exception as e:
+                self.status_label.configure(text="Lỗi lấy thông tin!", text_color="red")
+                messagebox.showerror("Lỗi", f"Không thể kết nối YouTube: {e}")
+
+        # Chạy vòng check này trong thread riêng để không treo GUI lúc đang fetch metadata
+        threading.Thread(target=check_and_start, daemon=True).start()
     def run_download(self, url):
         dl = VideoDownloader(self.progress_hook)
         result = dl.download(url, self.save_path.get(), self.quality_var.get(), self.audio_only.get())
