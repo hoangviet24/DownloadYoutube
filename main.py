@@ -1,11 +1,13 @@
-from utils import check_ffmpeg, install_ffmpeg
+from utils import check_ffmpeg, install_ffmpeg, resource_path
 from gui import App
 import tkinter as tk
 from tkinter import messagebox
 import ctypes
 myappid = 'viet.youtube.downloader.pro.1.0' 
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
 if __name__ == "__main__":
+
     # Bước 1: Kiểm tra FFmpeg
     if not check_ffmpeg():
         # Hiển thị thông báo nhỏ cho người dùng biết
@@ -23,5 +25,5 @@ if __name__ == "__main__":
             exit()
 
     # Bước 2: Vào App
-    app = App()
-    app.mainloop()
+app = App()
+app.mainloop()

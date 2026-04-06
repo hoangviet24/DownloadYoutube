@@ -32,7 +32,7 @@ class VideoDownloader:
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
-                    'preferredquality': '192',
+                    'preferredquality': quality,
                 }],
             })
         else:
