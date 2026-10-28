@@ -1,0 +1,8 @@
+customtkinter>=5.2.0
+yt-dlp>=2024.8.6
+openai-whisper
+torch
+torchvision
+torchaudio
+Pillow>=9.5.0
+moviepy>=1.0.3
